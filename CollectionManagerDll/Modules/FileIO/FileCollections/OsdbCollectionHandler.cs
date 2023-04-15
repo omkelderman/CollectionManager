@@ -256,7 +256,15 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                                 Type = (CustomFieldType)_binReader.ReadByte(),
                                 DisplayText = _binReader.ReadString(),
                             };
-                            customFieldDefinitions.Add(key, def);
+                            try
+                            {
+                                customFieldDefinitions.Add(key, def);
+                            }
+                            catch (ArgumentException)
+                            {
+                                // custom field key is already used
+                                throw new CorruptedFileException($"Collection declared multiple custom fields with the same key");
+                            }
                         }
                     }
 
