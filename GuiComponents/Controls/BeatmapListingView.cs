@@ -228,6 +228,7 @@ namespace GuiComponents.Controls
                 ListViewBeatmaps.AllColumns.Remove(col);
             }
             _customFieldColumns.Clear();
+            ListViewBeatmaps.RebuildColumns();
         }
 
         public void SetCustomFieldDefinitions(IEnumerable<CustomFieldDefinition> customFieldDefinitions)
@@ -238,8 +239,7 @@ namespace GuiComponents.Controls
                 {
                     IsEditable = false,
                     Text = customFieldDef.DisplayText,
-                    AspectGetter = rowObject => rowObject is BeatmapExtension beatmap ?
-                    beatmap.GetCustomFieldValue(customFieldDef.Key) : null
+                    AspectGetter = rowObject => rowObject is BeatmapExtension beatmap ? beatmap.GetCustomFieldValue(customFieldDef.Key) : null
                 };
 
                 switch (customFieldDef.Type)
@@ -255,6 +255,8 @@ namespace GuiComponents.Controls
                 _customFieldColumns.Add(col);
                 ListViewBeatmaps.AllColumns.Add(col);
             }
+
+            ListViewBeatmaps.RebuildColumns();
         }
 
         private void DropsinkOnModelDropped(object sender, ModelDropEventArgs modelDropEventArgs)
