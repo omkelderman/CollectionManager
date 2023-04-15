@@ -21,10 +21,11 @@ namespace CollectionManager.DataTypes
 
         public void SetCustomFieldValues(BeatmapExtension other)
         {
-            if(other._customFields == null)
+            if (other._customFields == null)
             {
                 _customFields = null;
-            } else
+            }
+            else
             {
                 _customFields = new Dictionary<string, object>(other._customFields);
             }
@@ -49,6 +50,11 @@ namespace CollectionManager.DataTypes
             {
                 if(customField.Value is string stringValue) yield return stringValue;
             }
+        }
+
+        public IEnumerable<KeyValuePair<string, object>> GetAllCustomFields()
+        {
+            return _customFields;
         }
 
         #endregion

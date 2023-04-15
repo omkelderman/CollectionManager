@@ -38,42 +38,33 @@ namespace CollectionManager.Modules.FileIO.FileCollections
             {"o!dm9", 9},
             {"o!dm7min", 1007},
             {"o!dm8min", 1008},
-            {"o!dm9min", 1008},
         };
+
+        private const string CurrentVersion = "o!dm9";
 
         public OsdbCollectionHandler(ILogger logger)
         {
             _logger = logger;
         }
 
-        public string CurrentVersion(bool minimalWrite = false)
-        {
-            return "o!dm9" + (minimalWrite ? "min" : "");
-        }
-
-        private bool IsFullCollection(string versionString)
-            => !isMinimalCollection(versionString);
-        private bool isMinimalCollection(string versionString)
-            => versionString.EndsWith("min");
-
-        public void WriteOsdb(Collections collections, string fullFileDir, string editor, bool minimalWrite = false)
+        public void WriteOsdb(Collections collections, string fullFileDir, string editor)
         {
             using (var fileStream = new FileStream(fullFileDir, FileMode.Create, FileAccess.ReadWrite))
             {
-                WriteOsdb(collections, fileStream, editor, minimalWrite);
+                WriteOsdb(collections, fileStream, editor);
             }
         }
 
-        public void WriteOsdb(Collections collections, Stream outputStream, string editor, bool minimalWrite = false)
+        public void WriteOsdb(Collections collections, Stream outputStream, string editor)
         {
             using (var osdbMemoryStream = new MemoryStream())
             using (var osdbBinaryWriter = new BinaryWriter(osdbMemoryStream))
             {
-                WriteOsdb(collections, osdbBinaryWriter, editor, minimalWrite);
+                WriteOsdb(collections, osdbBinaryWriter, editor);
 
                 using (var outputBinaryWriter = new BinaryWriter(outputStream, Encoding.UTF8, true))
                 {
-                    outputBinaryWriter.Write(CurrentVersion(minimalWrite));
+                    outputBinaryWriter.Write(CurrentVersion);
                     CompressStream(osdbMemoryStream, outputStream);
                 }
             }
@@ -89,11 +80,10 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                 archive.SaveTo(outputStream, new WriterOptions(CompressionType.GZip));
             }
         }
-        private void WriteOsdb(Collections collections, BinaryWriter _binWriter, string editor,
-            bool minimalWrite = false)
+        private void WriteOsdb(Collections collections, BinaryWriter _binWriter, string editor)
         {
             //header
-            _binWriter.Write(CurrentVersion(minimalWrite));
+            _binWriter.Write(CurrentVersion);
             //save date
             _binWriter.Write(DateTime.Now.ToOADate());
             //who saved given osdb
@@ -130,23 +120,49 @@ namespace CollectionManager.Modules.FileIO.FileCollections
 
                 _binWriter.Write(collection.Name);
                 _binWriter.Write(collection.OnlineId);
+                var customFieldDefLookup = new Dictionary<string, CustomFieldDefinition>();
+                foreach(var def in collection.CustomFieldDefinitions)
+                {
+                    customFieldDefLookup.Add(def.Key, def);
+                    _binWriter.Write(def.Key);
+                    _binWriter.Write((byte)def.Type);
+                    _binWriter.Write(def.DisplayText);
+                }
+                // signal end of custom field definitions
+                _binWriter.Write("");
                 _binWriter.Write(beatmapsPossibleToSave.Count);
                 //Save beatmaps
                 foreach (var beatmap in beatmapsPossibleToSave)
                 {
                     _binWriter.Write(beatmap.MapId);
                     _binWriter.Write(beatmap.MapSetId);
-                    if (!minimalWrite)
-                    {
-                        _binWriter.Write(beatmap.ArtistRoman);
-                        _binWriter.Write(beatmap.TitleRoman);
-                        _binWriter.Write(beatmap.DiffName);
-                    }
+                    _binWriter.Write(beatmap.ArtistRoman);
+                    _binWriter.Write(beatmap.TitleRoman);
+                    _binWriter.Write(beatmap.DiffName);
 
                     _binWriter.Write(beatmap.Md5);
                     _binWriter.Write(((BeatmapExtension)beatmap).UserComment);
                     _binWriter.Write((byte)beatmap.PlayMode);
                     _binWriter.Write(beatmap.StarsNomod);
+
+                    // completely skip the custom fields section if there are no definitions in the header of this collection
+                    if(customFieldDefLookup.Count > 0)
+                    {
+                        foreach (var kvp in ((BeatmapExtension)beatmap).GetAllCustomFields())
+                        {
+                            if (!customFieldDefLookup.TryGetValue(kvp.Key, out var def) ||
+                                !CustomFieldWriters.TryGetValue(def.Type, out var writer))
+                            {
+                                // definition or its stream writer not found??? skip value I guess
+                                continue;
+                            }
+
+                            _binWriter.Write(kvp.Key);
+                            writer(_binWriter, kvp.Value);
+                        }
+                        // signal end of custom field values
+                        _binWriter.Write("");
+                    }
                 }
 
                 _binWriter.Write(beatmapWithHashOnly.Count);
@@ -186,6 +202,13 @@ namespace CollectionManager.Modules.FileIO.FileCollections
             }
             else
             {
+                bool minimalCollection = false;
+                if(fileVersion > 1000)
+                {
+                    minimalCollection = true;
+                    fileVersion -= 1000;
+                }
+
                 if (fileVersion >= 7)
                 {
                     using (var archiveReader = GZipArchive.Open(_memStream))
@@ -249,7 +272,7 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                             map.MapSetId = _binReader.ReadInt32();
                         }
 
-                        if (!isMinimalCollection(versionString))
+                        if (!minimalCollection)
                         {
                             map.ArtistRoman = _binReader.ReadString();
                             map.TitleRoman = _binReader.ReadString();
@@ -262,16 +285,19 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                             map.UserComment = _binReader.ReadString();
                         }
 
-                        if (fileVersion >= 8 || (fileVersion >= 5 && IsFullCollection(versionString)))
+                        //versions 5-7 field existed only full collection, since version 8 field is always here
+                        if (fileVersion >= 8 || (fileVersion >= 5 && !minimalCollection))
                         {
                             map.PlayMode = (PlayMode)_binReader.ReadByte();
                         }
 
-                        if (fileVersion >= 8 || (fileVersion >= 6 && IsFullCollection(versionString)))
+                        //versions 6-7 field existed only full collection, since version 8 field is always here
+                        if (fileVersion >= 8 || (fileVersion >= 6 && !minimalCollection))
                         {
                             map.ModPpStars.Add(map.PlayMode, new StarRating { { 0, _binReader.ReadDouble() } });
                         }
 
+                        // completely skip the custom fields section regardless of version if there are no definitions in the header of this collection
                         if (fileVersion >= 9 && customFieldDefinitions.Count > 0)
                         {
                             for (var key = _binReader.ReadString(); key != ""; key = _binReader.ReadString())
@@ -338,6 +364,25 @@ namespace CollectionManager.Modules.FileIO.FileCollections
             { CustomFieldType.DateTime, reader => new DateTime(reader.ReadInt64()) },
             { CustomFieldType.Single, reader => reader.ReadSingle() },
             { CustomFieldType.Double, reader => reader.ReadDouble() },
+        };
+
+        private static readonly Dictionary<CustomFieldType, Action<BinaryWriter, object>> CustomFieldWriters = new()
+        {
+            { CustomFieldType.String, (writer, value) => writer.Write((string)value) },
+            { CustomFieldType.Boolean, (writer, value) => writer.Write((bool)value) },
+            { CustomFieldType.GameMode, (writer, value) => writer.Write((byte)value) },
+            { CustomFieldType.Grade, (writer, value) => writer.Write((byte)value) },
+            { CustomFieldType.UInt8, (writer, value) => writer.Write((byte)value) },
+            { CustomFieldType.UInt16, (writer, value) => writer.Write((ushort)value) },
+            { CustomFieldType.UInt32, (writer, value) => writer.Write((uint)value) },
+            { CustomFieldType.UInt64, (writer, value) => writer.Write((ulong)value) },
+            { CustomFieldType.Int8, (writer, value) => writer.Write((sbyte)value) },
+            { CustomFieldType.Int16, (writer, value) => writer.Write((short)value) },
+            { CustomFieldType.Int32, (writer, value) => writer.Write((int)value) },
+            { CustomFieldType.Int64, (writer, value) => writer.Write((long)value) },
+            { CustomFieldType.DateTime, (writer, value) => writer.Write(((DateTime)value).Ticks) },
+            { CustomFieldType.Single, (writer, value) => writer.Write((float)value) },
+            { CustomFieldType.Double, (writer, value) => writer.Write((double)value) },
         };
     }
 }
