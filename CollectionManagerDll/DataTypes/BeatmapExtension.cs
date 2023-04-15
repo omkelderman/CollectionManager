@@ -17,11 +17,11 @@ namespace CollectionManager.DataTypes
 
         #region Custom Field Stuff
 
-        private readonly Dictionary<string, object> _customFields = new();
+        private Dictionary<string, object> _customFields = new();
 
         public void SetCustomFieldValues(BeatmapExtension other)
         {
-            _customFields.Clear();
+            _customFields = new Dictionary<string, object>();
             foreach(var kvp in other._customFields)
             {
                 _customFields.Add(kvp.Key, kvp.Value);
