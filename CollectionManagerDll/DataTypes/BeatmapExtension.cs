@@ -52,6 +52,22 @@ namespace CollectionManager.DataTypes
             }
         }
 
+        public IEnumerable<long> GetAllImplicitLongCustomFieldValues()
+        {
+            if (_customFields == null) yield break;
+            foreach (var customField in _customFields)
+            {
+                if (customField.Value is sbyte sbyteValue) yield return sbyteValue;
+                if (customField.Value is byte byteValue) yield return byteValue;
+                if (customField.Value is short shortValue) yield return shortValue;
+                if (customField.Value is ushort ushortValue) yield return ushortValue;
+                if (customField.Value is int intValue) yield return intValue;
+                if (customField.Value is uint uintValue) yield return uintValue;
+                if (customField.Value is long longValue) yield return longValue;
+                // all other numeric types cannot be implicitly converted to an long
+            }
+        }
+
         public IEnumerable<KeyValuePair<string, object>> GetAllCustomFields()
         {
             return _customFields;

@@ -234,17 +234,21 @@ namespace CollectionManagerExtensionsDll.Modules.BeatmapFilter
                         return delegate (Beatmap b) { return isPatternMatch((double)b.State, op, num); };
                 }
             }
-            int id;
-            if (Int32.TryParse(searchWord, out id))
+            
+            if (long.TryParse(searchWord, out var number))
             {
                 if (BeatmapExtensionIsUsed)
                 {
                     return delegate (Beatmap b)
                     {
                         //match mapid and mapset id while input is numbers.
-                        if (b.MapId == id) return true;
-                        if (b.MapSetId == id) return true;
-                        if (b.ThreadId == id) return true;
+                        if (b.MapId == number) return true;
+                        if (b.MapSetId == number) return true;
+                        if (b.ThreadId == number) return true;
+
+                        // try matching numeric custom fields
+                        if (((BeatmapExtension)b).GetAllImplicitLongCustomFieldValues().Contains(number)) return true;
+
                         return isWordMatch((BeatmapExtension)b, searchWord);
                     };
                 }
@@ -253,9 +257,9 @@ namespace CollectionManagerExtensionsDll.Modules.BeatmapFilter
                     return delegate (Beatmap b)
                     {
                         //match mapid and mapset id while input is numbers.
-                        if (b.MapId == id) return true;
-                        if (b.MapSetId == id) return true;
-                        if (b.ThreadId == id) return true;
+                        if (b.MapId == number) return true;
+                        if (b.MapSetId == number) return true;
+                        if (b.ThreadId == number) return true;
                         return isWordMatch(b, searchWord);
                     };
                 }
