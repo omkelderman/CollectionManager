@@ -57,13 +57,30 @@ namespace CollectionManager.DataTypes
             if (_customFields == null) yield break;
             foreach (var customField in _customFields)
             {
-                if (customField.Value is sbyte sbyteValue) yield return sbyteValue;
-                if (customField.Value is byte byteValue) yield return byteValue;
-                if (customField.Value is short shortValue) yield return shortValue;
-                if (customField.Value is ushort ushortValue) yield return ushortValue;
-                if (customField.Value is int intValue) yield return intValue;
-                if (customField.Value is uint uintValue) yield return uintValue;
-                if (customField.Value is long longValue) yield return longValue;
+                switch (customField.Value)
+                {
+                    case sbyte sbyteValue:
+                        yield return sbyteValue;
+                        break;
+                    case byte byteValue:
+                        yield return byteValue;
+                        break;
+                    case short shortValue:
+                        yield return shortValue;
+                        break;
+                    case ushort ushortValue:
+                        yield return ushortValue;
+                        break;
+                    case int intValue:
+                        yield return intValue;
+                        break;
+                    case uint uintValue:
+                        yield return uintValue;
+                        break;
+                    case long longValue:
+                        yield return longValue;
+                        break;
+                }
                 // all other numeric types cannot be implicitly converted to an long
             }
         }

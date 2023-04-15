@@ -119,7 +119,7 @@ namespace App.Models
             if (_beatmapsDataSource != null && _beatmapListFilter != null)
             {
                 _beatmapListFilter.SetScores(Initalizer.OsuFileIo.ScoresDatabase.Scores);
-                _beatmapListFilter.SetBeatmaps(_beatmapsDataSource);
+                _beatmapListFilter.SetBeatmapsAndCustomFieldDefinitions(_beatmapsDataSource, CurrentCollection?.CustomFieldDefinitions);
             }
 
             BeatmapsChanged?.Invoke(this, EventArgs.Empty);

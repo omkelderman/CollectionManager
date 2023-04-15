@@ -35,19 +35,28 @@ namespace CollectionManagerExtensionsDll.Modules.BeatmapFilter
 
         private bool BeatmapExtensionIsUsed = false;
         private string _lastSearchString = String.Empty;
-        private Dictionary<string, Scores> _scores = new Dictionary<string, Scores>();
+        private readonly Dictionary<string, Scores> _scores = new Dictionary<string, Scores>();
+        private readonly Dictionary<string, CustomFieldDefinition> _customFieldDefinitions = new Dictionary<string, CustomFieldDefinition>(StringComparer.CurrentCultureIgnoreCase);
 
 
         public BeatmapFilter(Beatmaps beatmaps, Scores scores, Beatmap baseBeatmap)
         {
             BeatmapExtensionIsUsed = baseBeatmap.GetType().IsAssignableFrom(typeof(BeatmapExtension));
             SetScores(scores);
-            SetBeatmaps(beatmaps);
+            SetBeatmapsAndCustomFieldDefinitions(beatmaps, null);
         }
 
-        public void SetBeatmaps(Beatmaps beatmaps)
+        public void SetBeatmapsAndCustomFieldDefinitions(Beatmaps beatmaps, IReadOnlyCollection<CustomFieldDefinition> customFieldDefinitions)
         {
             _beatmaps = beatmaps;
+            _customFieldDefinitions.Clear();
+            if (customFieldDefinitions != null)
+            {
+                foreach (var customFieldDefinition in customFieldDefinitions)
+                {
+                    _customFieldDefinitions[customFieldDefinition.Key] = customFieldDefinition;
+                }
+            }
             UpdateSearch(_lastSearchString);
         }
 
@@ -197,6 +206,18 @@ namespace CollectionManagerExtensionsDll.Modules.BeatmapFilter
                                 return isPatternMatch(topScore == null ? 0 : 1, op, num);
                             };
                     }
+
+                    // try numeric custom fields
+                    if(BeatmapExtensionIsUsed && _customFieldDefinitions.TryGetValue(key, out var numCustomFieldDefinition) && numCustomFieldDefinition.TypeIsNumeric)
+                    {
+                        return b =>
+                        {
+                            var o = ((BeatmapExtension)b).GetCustomFieldValue(numCustomFieldDefinition.Key);
+                            if (o == null) return false;
+                            var d = Convert.ToDouble(o);
+                            return isPatternMatch(Math.Round(d, 2), op, num);
+                        };
+                    }
                 }
 
                 switch (key)
@@ -233,8 +254,40 @@ namespace CollectionManagerExtensionsDll.Modules.BeatmapFilter
 
                         return delegate (Beatmap b) { return isPatternMatch((double)b.State, op, num); };
                 }
+
+                // try string custom fields
+                if (BeatmapExtensionIsUsed && _customFieldDefinitions.TryGetValue(key, out var stringCustomFieldDefinition))
+                {
+
+                    // try string custom fields
+                    if (stringCustomFieldDefinition.Type == CustomFieldType.String)
+                    {
+                        return b =>
+                        {
+                            if (((BeatmapExtension)b).GetCustomFieldValue(stringCustomFieldDefinition.Key) is string s)
+                            {
+                                return s.IndexOf(val, StringComparison.CurrentCultureIgnoreCase) >= 0;
+                            }
+
+                            return false;
+                        };
+                    }
+                    else if (stringCustomFieldDefinition.Type == CustomFieldType.GameMode)
+                    {
+                        var modeNum = descriptorToNum(val, ModePairs);
+                        return b =>
+                        {
+                            if (((BeatmapExtension)b).GetCustomFieldValue(stringCustomFieldDefinition.Key) is PlayMode m)
+                            {
+                                return isPatternMatch((double)m, op, modeNum);
+                            }
+
+                            return false;
+                        };
+                    }
+                }
             }
-            
+
             if (long.TryParse(searchWord, out var number))
             {
                 if (BeatmapExtensionIsUsed)

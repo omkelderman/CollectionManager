@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using BrightIdeasSoftware;
 using CollectionManager.DataTypes;
@@ -25,8 +26,8 @@ namespace App.Misc
             timer.Tick += Timer_Tick;
         }
 
-        public void SetBeatmaps(Beatmaps beatmaps)
-            => _beatmapFilter.SetBeatmaps(beatmaps);
+        public void SetBeatmapsAndCustomFieldDefinitions(Beatmaps beatmaps, IReadOnlyCollection<CustomFieldDefinition> customFieldDefinitions)
+            => _beatmapFilter.SetBeatmapsAndCustomFieldDefinitions(beatmaps, customFieldDefinitions);
 
         public void SetScores(Scores scores)
             => _beatmapFilter.SetScores(scores);

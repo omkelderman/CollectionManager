@@ -242,14 +242,13 @@ namespace GuiComponents.Controls
                     AspectGetter = rowObject => rowObject is BeatmapExtension beatmap ? beatmap.GetCustomFieldValue(customFieldDef.Key) : null
                 };
 
-                switch (customFieldDef.Type)
+                if (customFieldDef.Type == CustomFieldType.Grade)
                 {
-                    case CustomFieldType.Grade:
-                        col.AspectToStringConverter = GradeConverter;
-                        break;
-                    case (>=CustomFieldType.UInt8 and <= CustomFieldType.Int64) or CustomFieldType.Single or CustomFieldType.Double:
-                        col.AspectToStringFormat = NumberAspectFormat;
-                        break;
+                    col.AspectToStringConverter = GradeConverter;
+                }
+                else if (customFieldDef.TypeIsNumeric)
+                {
+                    col.AspectToStringFormat = NumberAspectFormat;
                 }
 
                 _customFieldColumns.Add(col);
