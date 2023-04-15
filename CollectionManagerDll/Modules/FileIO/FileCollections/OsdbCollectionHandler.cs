@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -34,8 +35,10 @@ namespace CollectionManager.Modules.FileIO.FileCollections
             {"o!dm6", 6},
             {"o!dm7", 7},
             {"o!dm8", 8},
+            {"o!dm9", 9},
             {"o!dm7min", 1007},
             {"o!dm8min", 1008},
+            {"o!dm9min", 1008},
         };
 
         public OsdbCollectionHandler(ILogger logger)
@@ -45,14 +48,14 @@ namespace CollectionManager.Modules.FileIO.FileCollections
 
         public string CurrentVersion(bool minimalWrite = false)
         {
-            return "o!dm8" + (minimalWrite ? "min" : "");
+            return "o!dm9" + (minimalWrite ? "min" : "");
         }
 
         private bool IsFullCollection(string versionString)
             => !isMinimalCollection(versionString);
         private bool isMinimalCollection(string versionString)
             => versionString.EndsWith("min");
-        
+
         public void WriteOsdb(Collections collections, string fullFileDir, string editor, bool minimalWrite = false)
         {
             using (var fileStream = new FileStream(fullFileDir, FileMode.Create, FileAccess.ReadWrite))
@@ -211,11 +214,32 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                         onlineId = _binReader.ReadInt32();
                     }
 
+                    var collection = new Collection(mapCacher)
+                    {
+                        Name = name,
+                        LastEditorUsername = lastEditor,
+                        OnlineId = onlineId
+                    };
+
+                    var customFieldDefinitions = new Dictionary<string, CustomFieldDefinition>();
+                    var actuallyUsedCustomFieldDefinitions = new HashSet<string>();
+                    if (fileVersion >= 9)
+                    {
+                        for (var key = _binReader.ReadString(); key != ""; key = _binReader.ReadString())
+                        {
+                            var def = new CustomFieldDefinition
+                            {
+                                Key = key,
+                                Type = (CustomFieldType)_binReader.ReadByte(),
+                                DisplayText = _binReader.ReadString(),
+                            };
+                            customFieldDefinitions.Add(key, def);
+                        }
+                    }
+
                     var numberOfBeatmaps = _binReader.ReadInt32();
                     _logger?.Log(">Number of maps in collection {0}: {1} named:{2}", i.ToString(),
                         numberOfBeatmaps.ToString(), name);
-                    var collection = new Collection(mapCacher)
-                    { Name = name, LastEditorUsername = lastEditor, OnlineId = onlineId };
                     for (var j = 0; j < numberOfBeatmaps; j++)
                     {
                         var map = new BeatmapExtension();
@@ -248,8 +272,31 @@ namespace CollectionManager.Modules.FileIO.FileCollections
                             map.ModPpStars.Add(map.PlayMode, new StarRating { { 0, _binReader.ReadDouble() } });
                         }
 
+                        if (fileVersion >= 9 && customFieldDefinitions.Count > 0)
+                        {
+                            for (var key = _binReader.ReadString(); key != ""; key = _binReader.ReadString())
+                            {
+                                if (!customFieldDefinitions.TryGetValue(key, out var customFieldDef) ||
+                                    !CustomFieldReaders.TryGetValue(customFieldDef.Type, out var readerFunc))
+                                {
+                                    // skip value, it has no definition or we dont know how to handle this type
+                                    continue;
+                                }
+
+                                var customFieldValue = readerFunc(_binReader);
+                                map.SetCustomFieldValue(key, customFieldValue);
+                                actuallyUsedCustomFieldDefinitions.Add(key);
+                            }
+                        }
+
                         collection.AddBeatmap(map);
                     }
+
+                    collection.CustomFieldDefinitions = customFieldDefinitions
+                        .Where(x => actuallyUsedCustomFieldDefinitions.Contains(x.Key))
+                        .Select(x => x.Value)
+                        .ToList()
+                        .AsReadOnly();
 
                     if (fileVersion >= 3)
                     {
@@ -273,5 +320,24 @@ namespace CollectionManager.Modules.FileIO.FileCollections
 
             _binReader.Close();
         }
+
+        private static readonly Dictionary<CustomFieldType, Func<BinaryReader, object>> CustomFieldReaders = new()
+        {
+            { CustomFieldType.String, reader => reader.ReadString() },
+            { CustomFieldType.Boolean, reader => reader.ReadBoolean() },
+            { CustomFieldType.GameMode, reader => (PlayMode)reader.ReadByte() },
+            { CustomFieldType.Grade, reader => (OsuGrade)reader.ReadByte() },
+            { CustomFieldType.UInt8, reader => reader.ReadByte() },
+            { CustomFieldType.UInt16, reader => reader.ReadUInt16() },
+            { CustomFieldType.UInt32, reader => reader.ReadUInt32() },
+            { CustomFieldType.UInt64, reader => reader.ReadUInt64() },
+            { CustomFieldType.Int8, reader => reader.ReadSByte() },
+            { CustomFieldType.Int16, reader => reader.ReadInt16() },
+            { CustomFieldType.Int32, reader => reader.ReadInt32() },
+            { CustomFieldType.Int64, reader => reader.ReadInt64() },
+            { CustomFieldType.DateTime, reader => new DateTime(reader.ReadInt64()) },
+            { CustomFieldType.Single, reader => reader.ReadSingle() },
+            { CustomFieldType.Double, reader => reader.ReadDouble() },
+        };
     }
 }
